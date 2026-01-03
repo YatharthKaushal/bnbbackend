@@ -4,6 +4,8 @@
  */
 
 const User = require('../models/User');
+const Owner = require('../models/Owner');
+const Admin = require('../models/Admin');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const generateToken = require('../utils/generateToken');
@@ -118,6 +120,22 @@ exports.login = async (req, res, next) => {
     user.last_login = new Date();
     await user.save();
 
+    // Fetch owner_id or admin_id based on user_type
+    let owner_id = null;
+    let admin_id = null;
+
+    if (user.user_type === 'owner') {
+      const ownerRecord = await Owner.findOne({ user_id: user._id });
+      if (ownerRecord && ownerRecord._id) {
+        owner_id = ownerRecord._id;
+      }
+    } else if (user.user_type === 'admin') {
+      const adminRecord = await Admin.findOne({ user_id: user._id });
+      if (adminRecord && adminRecord._id) {
+        admin_id = adminRecord._id;
+      }
+    }
+
     // Return user without password
     const userResponse = {
       _id: user._id,
@@ -131,6 +149,14 @@ exports.login = async (req, res, next) => {
       location_lng: user.location_lng,
       created_at: user.created_at
     };
+
+    // Include owner_id or admin_id if available
+    if (owner_id) {
+      userResponse.owner_id = owner_id;
+    }
+    if (admin_id) {
+      userResponse.admin_id = admin_id;
+    }
 
     return success(res, { user: userResponse, token });
   } catch (err) {
