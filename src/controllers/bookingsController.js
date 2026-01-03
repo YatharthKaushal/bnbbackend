@@ -146,8 +146,8 @@ exports.getBookingById = async (req, res, next) => {
 
 /**
  * @desc    Get user's bookings
- * @route   GET /api/users/:userId/bookings
- * @access  Private/Owner
+ * @route   GET /api/bookings/users/:userId/bookings
+ * @access  Private
  */
 exports.getUserBookings = async (req, res, next) => {
   try {
@@ -189,8 +189,8 @@ exports.getUserBookings = async (req, res, next) => {
 
 /**
  * @desc    Get owner's bookings
- * @route   GET /api/owners/:ownerId/bookings
- * @access  Private/Owner
+ * @route   GET /api/bookings/owners/:ownerId/bookings
+ * @access  Private
  */
 exports.getOwnerBookings = async (req, res, next) => {
   try {

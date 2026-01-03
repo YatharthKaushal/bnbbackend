@@ -94,6 +94,11 @@ exports.getPropertyById = async (req, res, next) => {
  * @access  Private/Owner
  */
 exports.createProperty = async (req, res, next) => {
+  console.log('[createProperty] Request received');
+  console.log('[createProperty] User ID:', req.user?._id);
+  console.log('[createProperty] User type:', req.user?.user_type);
+  console.log('[createProperty] Request body:', JSON.stringify(req.body, null, 2));
+
   try {
     const {
       property_name,
@@ -107,20 +112,28 @@ exports.createProperty = async (req, res, next) => {
       property_images
     } = req.body;
 
+    console.log('[createProperty] Extracted data - property_name:', property_name, ', city:', city, ', state:', state);
+
     // Check if user is an owner
+    console.log('[createProperty] Looking up owner for user_id:', req.user._id);
     const owner = await Owner.findOne({ user_id: req.user._id });
+    console.log('[createProperty] Owner lookup result:', owner ? `Found owner_id: ${owner._id}` : 'Not found');
 
     if (!owner && req.user.user_type !== 'admin') {
+      console.log('[createProperty] ERROR: User is not an owner and not an admin');
       return error(res, errorCodes.AUTH_FORBIDDEN, 403, 'Only property owners can create properties');
     }
 
     const ownerId = owner ? owner._id : req.body.owner_id;
+    console.log('[createProperty] Using owner_id:', ownerId);
 
     if (!ownerId) {
+      console.log('[createProperty] ERROR: Owner ID is required but not provided');
       return error(res, errorCodes.REQ_VALIDATION, 400, 'Owner ID is required');
     }
 
     // Create property
+    console.log('[createProperty] Creating property in database...');
     const property = await Property.create({
       owner_id: ownerId,
       property_name,
@@ -134,12 +147,19 @@ exports.createProperty = async (req, res, next) => {
       property_images: property_images || [],
       is_active: true
     });
+    console.log('[createProperty] Property created with _id:', property._id);
 
     const populatedProperty = await Property.findById(property._id)
       .populate('owner_id', 'user_id is_verified');
+    console.log('[createProperty] Property populated successfully');
 
+    console.log('[createProperty] SUCCESS: Returning property with status 201');
     return success(res, { property: populatedProperty }, null, 201);
   } catch (err) {
+    console.log('[createProperty] ERROR: Exception caught');
+    console.log('[createProperty] Error name:', err.name);
+    console.log('[createProperty] Error message:', err.message);
+    console.log('[createProperty] Error stack:', err.stack);
     next(err);
   }
 };
@@ -250,8 +270,8 @@ exports.deleteProperty = async (req, res, next) => {
 
 /**
  * @desc    Get properties by owner
- * @route   GET /api/owners/:ownerId/properties
- * @access  Private/Owner or Admin
+ * @route   GET /api/properties/owners/:ownerId
+ * @access  Private
  */
 exports.getPropertiesByOwner = async (req, res, next) => {
   try {

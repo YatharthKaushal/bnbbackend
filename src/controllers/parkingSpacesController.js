@@ -112,7 +112,7 @@ exports.getSpaceById = async (req, res, next) => {
 
 /**
  * @desc    Get spaces by property
- * @route   GET /api/properties/:propertyId/spaces
+ * @route   GET /api/parking-spaces/properties/:propertyId
  * @access  Public
  */
 exports.getSpacesByProperty = async (req, res, next) => {
@@ -154,10 +154,16 @@ exports.getSpacesByProperty = async (req, res, next) => {
 
 /**
  * @desc    Create parking space
- * @route   POST /api/properties/:propertyId/spaces
+ * @route   POST /api/parking-spaces/properties/:propertyId/spaces
  * @access  Private/Owner
  */
 exports.createSpace = async (req, res, next) => {
+  console.log('[createSpace] Request received');
+  console.log('[createSpace] User ID:', req.user?._id);
+  console.log('[createSpace] User type:', req.user?.user_type);
+  console.log('[createSpace] Property ID (params):', req.params.propertyId);
+  console.log('[createSpace] Request body:', JSON.stringify(req.body, null, 2));
+
   try {
     const { propertyId } = req.params;
     const {
@@ -177,39 +183,57 @@ exports.createSpace = async (req, res, next) => {
       is_available
     } = req.body;
 
+    console.log('[createSpace] Extracted data - space_number:', space_number, ', space_type:', space_type, ', price_per_hour:', price_per_hour);
+
     // Check if property exists
+    console.log('[createSpace] Looking up property with ID:', propertyId);
     const property = await Property.findById(propertyId).populate('owner_id');
     if (!property) {
+      console.log('[createSpace] ERROR: Property not found for ID:', propertyId);
       return error(res, errorCodes.NOT_FOUND, 404, 'Property not found');
     }
+    console.log('[createSpace] Property found:', property.property_name);
 
     // Check authorization - user must be the property owner or admin
     const propertyOwnerUserId = property.owner_id && property.owner_id.user_id ?
       property.owner_id.user_id.toString() : null;
+    console.log('[createSpace] Property owner user_id:', propertyOwnerUserId);
+    console.log('[createSpace] Request user_id:', req.user._id.toString());
 
     if (req.user.user_type !== 'admin' && propertyOwnerUserId !== req.user._id.toString()) {
+      console.log('[createSpace] ERROR: User not authorized - not owner and not admin');
       return error(res, errorCodes.AUTH_FORBIDDEN, 403, 'Not authorized to create spaces for this property');
     }
+    console.log('[createSpace] Authorization check passed');
 
     // Check if space number already exists for this property
+    console.log('[createSpace] Checking for duplicate space_number:', space_number);
     const existingSpace = await ParkingSpace.findOne({
       property_id: propertyId,
       space_number
     });
 
     if (existingSpace) {
+      console.log('[createSpace] ERROR: Space number already exists - existing space_id:', existingSpace._id);
       return error(res, errorCodes.BIZ_CONFLICT, 409, 'Space number already exists for this property');
     }
+    console.log('[createSpace] No duplicate space_number found');
 
     // Get owner ID
+    console.log('[createSpace] Looking up owner for user_id:', req.user._id);
     const owner = await Owner.findOne({ user_id: req.user._id });
+    console.log('[createSpace] Owner lookup result:', owner ? `Found owner_id: ${owner._id}` : 'Not found');
+
     if (!owner && req.user.user_type !== 'admin') {
+      console.log('[createSpace] ERROR: User is not registered as owner and not admin');
       return error(res, errorCodes.AUTH_FORBIDDEN, 403, 'User must be registered as an owner to create parking spaces');
     }
 
     const ownerId = owner ? owner._id : property.owner_id._id;
+    console.log('[createSpace] Using owner_id:', ownerId);
 
     // Create parking space
+    console.log('[createSpace] Creating parking space in database...');
     const space = await ParkingSpace.create({
       property_id: propertyId,
       owner_id: ownerId,
@@ -233,10 +257,15 @@ exports.createSpace = async (req, res, next) => {
       status: is_available !== undefined ? (is_available ? 'active' : 'inactive') : 'active',
       average_rating: 0
     });
+    console.log('[createSpace] Parking space created with _id:', space._id);
 
+    console.log('[createSpace] SUCCESS: Returning space with status 201');
     return success(res, { space }, null, 201);
   } catch (err) {
-    console.error('Create space error:', err);
+    console.log('[createSpace] ERROR: Exception caught');
+    console.log('[createSpace] Error name:', err.name);
+    console.log('[createSpace] Error message:', err.message);
+    console.log('[createSpace] Error stack:', err.stack);
     return error(res, errorCodes.SERVER_ERROR, 500, 'Error creating parking space');
   }
 };
