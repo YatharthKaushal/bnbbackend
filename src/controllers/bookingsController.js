@@ -354,8 +354,8 @@ exports.createBooking = async (req, res, next) => {
       base_price: totalPrice,
       discount_amount: discountAmount,
       total_amount: finalPrice,
-      status: 'pending',
-      payment_status: 'pending',
+      status: 'confirmed',
+      payment_status: 'confirmed',
       promo_code: promo_code || null
     });
 
