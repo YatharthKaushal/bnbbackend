@@ -144,22 +144,35 @@ exports.getConversationById = async (req, res, next) => {
  * @access  Private
  */
 exports.createConversation = async (req, res, next) => {
+  console.log("[createConversation] Request received");
+  console.log("[createConversation] User ID:", req.user?._id);
+  console.log("[createConversation] User type:", req.user?.user_type);
+  console.log("[createConversation] Request body:", JSON.stringify(req.body, null, 2));
+
   try {
     const { participant_id, booking_id } = req.body;
     const Booking = require("../models/Booking");
+
+    console.log("[createConversation] Extracted data - participant_id:", participant_id, ", booking_id:", booking_id);
 
     let owner_id;
 
     // If booking_id is provided, get owner_id from the booking
     if (booking_id) {
+      console.log("[createConversation] Looking up booking with ID:", booking_id);
       const booking = await Booking.findById(booking_id);
 
       if (!booking) {
+        console.log("[createConversation] ERROR: Booking not found for ID:", booking_id);
         return error(res, errorCodes.NOT_FOUND, 404, "Booking not found");
       }
+      console.log("[createConversation] Booking found - booking_number:", booking.booking_number);
 
       // Verify booking belongs to user
+      console.log("[createConversation] Booking user_id:", booking.user_id.toString());
+      console.log("[createConversation] Request user_id:", req.user._id.toString());
       if (booking.user_id.toString() !== req.user._id.toString()) {
+        console.log("[createConversation] ERROR: Booking does not belong to user");
         return error(
           res,
           errorCodes.AUTH_FORBIDDEN,
@@ -170,18 +183,24 @@ exports.createConversation = async (req, res, next) => {
 
       // Get owner_id from the booking
       owner_id = booking.owner_id;
+      console.log("[createConversation] Owner ID from booking:", owner_id);
     } else if (participant_id) {
+      console.log("[createConversation] Looking up owner by participant_id:", participant_id);
       // Fallback: try to find owner by participant_id (could be owner_id or user_id)
       let owner = await Owner.findById(participant_id);
       if (!owner) {
+        console.log("[createConversation] Owner not found by _id, trying user_id lookup");
         // participant_id might be a user_id, try to find owner by user_id
         owner = await Owner.findOne({ user_id: participant_id });
       }
       if (!owner) {
+        console.log("[createConversation] ERROR: Owner not found for participant_id:", participant_id);
         return error(res, errorCodes.NOT_FOUND, 404, "Owner not found");
       }
       owner_id = owner._id;
+      console.log("[createConversation] Owner found - owner_id:", owner_id);
     } else {
+      console.log("[createConversation] ERROR: Neither booking_id nor participant_id provided");
       return error(
         res,
         errorCodes.BIZ_VALIDATION,
@@ -191,12 +210,16 @@ exports.createConversation = async (req, res, next) => {
     }
 
     // Verify owner exists
+    console.log("[createConversation] Verifying owner exists with ID:", owner_id);
     const owner = await Owner.findById(owner_id);
     if (!owner) {
+      console.log("[createConversation] ERROR: Owner not found for ID:", owner_id);
       return error(res, errorCodes.NOT_FOUND, 404, "Owner not found");
     }
+    console.log("[createConversation] Owner verified - business_name:", owner.business_name);
 
     // Check if conversation already exists between user and owner
+    console.log("[createConversation] Checking for existing conversation - user_id:", req.user._id, ", owner_id:", owner_id);
     let conversation = await Conversation.findOne({
       user_id: req.user._id,
       owner_id: owner_id,
@@ -206,24 +229,31 @@ exports.createConversation = async (req, res, next) => {
       .populate("booking_id", "booking_number space_id");
 
     if (conversation) {
+      console.log("[createConversation] Existing conversation found - conversation_id:", conversation._id);
+      console.log("[createConversation] SUCCESS: Returning existing conversation");
       // Return existing conversation
       return success(res, { conversation, existing: true });
     }
+    console.log("[createConversation] No existing conversation found");
 
     // Create new conversation
+    console.log("[createConversation] Creating new conversation in database...");
     conversation = await Conversation.create({
       user_id: req.user._id,
       owner_id: owner_id,
       booking_id: booking_id || null,
       last_message_at: new Date(),
     });
+    console.log("[createConversation] Conversation created with _id:", conversation._id);
 
     // Populate and return
     const populatedConversation = await Conversation.findById(conversation._id)
       .populate("user_id", "email first_name last_name")
       .populate("owner_id", "business_name user_id")
       .populate("booking_id", "booking_number space_id");
+    console.log("[createConversation] Conversation populated successfully");
 
+    console.log("[createConversation] SUCCESS: Returning new conversation with status 201");
     return success(
       res,
       { conversation: populatedConversation, existing: false },
@@ -231,7 +261,10 @@ exports.createConversation = async (req, res, next) => {
       201
     );
   } catch (err) {
-    console.error("Create conversation error:", err);
+    console.log("[createConversation] ERROR: Exception caught");
+    console.log("[createConversation] Error name:", err.name);
+    console.log("[createConversation] Error message:", err.message);
+    console.log("[createConversation] Error stack:", err.stack);
     return error(
       res,
       errorCodes.SERVER_ERROR,

@@ -105,44 +105,67 @@ exports.getMessageById = async (req, res, next) => {
  * @access  Private/Participant
  */
 exports.sendMessage = async (req, res, next) => {
+  console.log('[sendMessage] Request received');
+  console.log('[sendMessage] User ID:', req.user?._id);
+  console.log('[sendMessage] User type:', req.user?.user_type);
+  console.log('[sendMessage] Conversation ID (params):', req.params.conversationId);
+  console.log('[sendMessage] Request body:', JSON.stringify(req.body, null, 2));
+
   try {
     const { conversationId } = req.params;
     const { message_text, message_attachments } = req.body;
 
+    console.log('[sendMessage] Extracted data - message_text length:', message_text?.length, ', attachments count:', message_attachments?.length || 0);
+
     if (!message_text || !message_text.trim()) {
+      console.log('[sendMessage] ERROR: Message text is empty or missing');
       return error(res, errorCodes.REQ_VALIDATION, 400, 'Message text is required');
     }
 
     // Get conversation to verify participation
+    console.log('[sendMessage] Looking up conversation with ID:', conversationId);
     const conversation = await Conversation.findById(conversationId);
 
     if (!conversation) {
+      console.log('[sendMessage] ERROR: Conversation not found for ID:', conversationId);
       return error(res, errorCodes.NOT_FOUND, 404, 'Conversation not found');
     }
+    console.log('[sendMessage] Conversation found - user_id:', conversation.user_id, ', owner_id:', conversation.owner_id);
 
     // Check authorization and determine sender type
+    console.log('[sendMessage] Looking up owner for user_id:', req.user._id);
     const owner = await Owner.findOne({ user_id: req.user._id });
+    console.log('[sendMessage] Owner lookup result:', owner ? `Found owner_id: ${owner._id}` : 'Not found');
+
     let senderType;
     let senderId;
     let isParticipant = false;
+
+    console.log('[sendMessage] Conversation user_id:', conversation.user_id.toString());
+    console.log('[sendMessage] Request user_id:', req.user._id.toString());
 
     if (conversation.user_id.toString() === req.user._id.toString()) {
       // User is sending message
       senderType = 'User';
       senderId = req.user._id;
       isParticipant = true;
+      console.log('[sendMessage] Sender identified as User');
     } else if (owner && conversation.owner_id.toString() === owner._id.toString()) {
       // Owner is sending message
       senderType = 'Owner';
       senderId = owner._id;
       isParticipant = true;
+      console.log('[sendMessage] Sender identified as Owner');
     }
 
     if (!isParticipant && req.user.user_type !== 'admin') {
+      console.log('[sendMessage] ERROR: User not authorized - not a participant and not admin');
       return error(res, errorCodes.AUTH_FORBIDDEN, 403, 'Not authorized to send messages in this conversation');
     }
+    console.log('[sendMessage] Authorization check passed - senderType:', senderType, ', senderId:', senderId);
 
     // Create message
+    console.log('[sendMessage] Creating message in database...');
     const message = await Message.create({
       conversation_id: conversationId,
       sender_id: senderId,
@@ -151,14 +174,21 @@ exports.sendMessage = async (req, res, next) => {
       message_attachments: message_attachments || [],
       is_read: false
     });
+    console.log('[sendMessage] Message created with _id:', message._id);
 
     // Update conversation's last_message_at
+    console.log('[sendMessage] Updating conversation last_message_at...');
     conversation.last_message_at = new Date();
     await conversation.save();
+    console.log('[sendMessage] Conversation updated');
 
+    console.log('[sendMessage] SUCCESS: Returning message with status 201');
     return success(res, { message }, null, 201);
   } catch (err) {
-    console.error('Send message error:', err);
+    console.log('[sendMessage] ERROR: Exception caught');
+    console.log('[sendMessage] Error name:', err.name);
+    console.log('[sendMessage] Error message:', err.message);
+    console.log('[sendMessage] Error stack:', err.stack);
     return error(res, errorCodes.SERVER_ERROR, 500, 'Error sending message');
   }
 };
