@@ -146,9 +146,49 @@ exports.getConversationById = async (req, res, next) => {
 exports.createConversation = async (req, res, next) => {
   try {
     const { participant_id, booking_id } = req.body;
+    const Booking = require("../models/Booking");
 
-    // participant_id is the owner_id
-    const owner_id = participant_id;
+    let owner_id;
+
+    // If booking_id is provided, get owner_id from the booking
+    if (booking_id) {
+      const booking = await Booking.findById(booking_id);
+
+      if (!booking) {
+        return error(res, errorCodes.NOT_FOUND, 404, "Booking not found");
+      }
+
+      // Verify booking belongs to user
+      if (booking.user_id.toString() !== req.user._id.toString()) {
+        return error(
+          res,
+          errorCodes.AUTH_FORBIDDEN,
+          403,
+          "Booking does not belong to you"
+        );
+      }
+
+      // Get owner_id from the booking
+      owner_id = booking.owner_id;
+    } else if (participant_id) {
+      // Fallback: try to find owner by participant_id (could be owner_id or user_id)
+      let owner = await Owner.findById(participant_id);
+      if (!owner) {
+        // participant_id might be a user_id, try to find owner by user_id
+        owner = await Owner.findOne({ user_id: participant_id });
+      }
+      if (!owner) {
+        return error(res, errorCodes.NOT_FOUND, 404, "Owner not found");
+      }
+      owner_id = owner._id;
+    } else {
+      return error(
+        res,
+        errorCodes.BIZ_VALIDATION,
+        400,
+        "Either booking_id or participant_id is required"
+      );
+    }
 
     // Verify owner exists
     const owner = await Owner.findById(owner_id);
@@ -168,36 +208,6 @@ exports.createConversation = async (req, res, next) => {
     if (conversation) {
       // Return existing conversation
       return success(res, { conversation, existing: true });
-    }
-
-    // Validate booking if provided
-    if (booking_id) {
-      const Booking = require("../models/Booking");
-      const booking = await Booking.findById(booking_id);
-
-      if (!booking) {
-        return error(res, errorCodes.NOT_FOUND, 404, "Booking not found");
-      }
-
-      // Verify booking belongs to user
-      if (booking.user_id.toString() !== req.user._id.toString()) {
-        return error(
-          res,
-          errorCodes.AUTH_FORBIDDEN,
-          403,
-          "Booking does not belong to you"
-        );
-      }
-
-      // Verify booking is with this owner
-      if (booking.owner_id.toString() !== owner_id) {
-        return error(
-          res,
-          errorCodes.BIZ_VALIDATION,
-          400,
-          "Booking is not with this owner"
-        );
-      }
     }
 
     // Create new conversation
